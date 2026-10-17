@@ -6,3 +6,10 @@ xcassets:
   outputs:
     - templateName: swift5
       output: swiftgen-elements/Generated/SwiftGen/Assets+Generated.swift
+
+strings:
+  inputs:
+    - swiftgen-elements/en.lproj
+  outputs:
+    - templateName: structured-swift5
+      output: swiftgen-elements/Generated/SwiftGen/L10n+Generated.swift

@@ -160,3 +160,193 @@ Cleanup:
 
 ### Takeaway
 Stage 1 goal met: generation is reproducible from config, output location is explicit, and failure diagnostics are clear enough to debug common setup mistakes quickly.
+
+
+## Stage 2 — Type-safe assets and colors
+
+### Goal
+Understand how SwiftGen turns asset catalogs into APIs, how those APIs behave in SwiftUI, and how this compares with native Xcode asset symbols.
+
+### Hypothesis
+SwiftGen and native Xcode asset symbols should both provide compile-time safety once symbols are regenerated, but their failure timing differs when an asset is renamed and generation is out of date.
+
+### Hands-on changes
+Added sample resources:
+- `swiftgen-elements/Colors.xcassets/status-warning.colorset/Contents.json`
+- `swiftgen-elements/Icons.xcassets/caret-right-light.imageset/Contents.json`
+- `swiftgen-elements/Icons.xcassets/caret-right-light.imageset/caret-right-light.svg`
+
+Updated view usage in:
+- `swiftgen-elements/ContentView.swift`
+
+The view now shows side-by-side usage:
+- SwiftGen API: `Asset.Icons.*.swiftUIImage`, `Asset.Colors.statusWarning.swiftUIColor`
+- Native API: `Image(.caretLeftRenamed)`, `Color.statusWarning`
+
+### Commands run
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen config run --verbose
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build | cat
+```
+
+### Inspect the generated output
+SwiftGen output file:
+- `swiftgen-elements/Generated/SwiftGen/Assets+Generated.swift`
+
+Confirmed symbols include:
+- `Asset.Colors.statusWarning`
+- `Asset.Icons.caretLeftRenamed`
+- `Asset.Icons.caretRightLight`
+
+Native Xcode generated symbols (DerivedSources) included:
+- `Color.statusWarning`
+- `ImageResource.caretLeftRenamed`
+- `ImageResource.caretRightLight`
+
+### Deliberate failure; diagnose and repair
+#### Failure setup
+Renamed icon asset folder from `caret-left-light.imageset` to `caret-left-renamed.imageset` (and matching svg filename) without first updating usage.
+
+#### Build without regenerating SwiftGen
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build | cat
+```
+Observed error:
+- `type 'ImageResource' has no member 'caretLeftLight'`
+
+Interpretation:
+- Native symbols are regenerated during build, so stale native references fail immediately at compile time.
+- SwiftGen reference to old generated symbol did not fail yet because SwiftGen had not been rerun.
+
+#### Build after regenerating SwiftGen
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen config run --verbose
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build | cat
+```
+Observed error:
+- `type 'Asset.Icons' has no member 'caretLeftLight'`
+
+Interpretation:
+- After regeneration, SwiftGen aligns to renamed assets and stale Swift references fail at compile time too.
+
+#### Repair
+Updated references to renamed symbol in `swiftgen-elements/ContentView.swift`:
+- `Asset.Icons.caretLeftRenamed`
+- `Image(.caretLeftRenamed)`
+
+Verification build succeeded.
+
+### Compare alternatives and trade-offs
+- Native asset symbols are zero-config once Xcode setting is enabled and update on every build.
+- SwiftGen adds explicit generated source control, customizable templates, and cross-resource consistency.
+- With SwiftGen, forgetting to regenerate can defer failures (or become runtime failures if stale generated code still compiles and code path executes).
+- With native symbols, renamed assets usually fail at compile time on next build without extra generation steps.
+
+### Undo / rollback notes
+- To undo this experiment, rename `caret-left-renamed.imageset` back to `caret-left-light.imageset`, revert `ContentView.swift`, then rerun `swiftgen config run`.
+
+### Takeaway
+For this project size, native symbols are simpler operationally. SwiftGen still provides value when teams want a controlled generated API surface, template customization, and standardized resource access patterns across modules.
+
+
+## Stage 3 — Localization and generated strings
+
+### Goal
+Learn SwiftGen localization accessors and separate what generation validates from what localization runtime resolves.
+
+### Hypothesis
+SwiftGen should generate typed `L10n` accessors from `.strings`/`.stringsdict`; argument type mismatches should fail at compile time, while missing translation values in secondary locales remain a runtime concern.
+
+### Hands-on changes
+Added localization resources:
+- `swiftgen-elements/en.lproj/Localizable.strings`
+- `swiftgen-elements/en.lproj/Localizable.stringsdict`
+- `swiftgen-elements/es.lproj/Localizable.strings`
+- `swiftgen-elements/es.lproj/Localizable.stringsdict`
+
+Configured strings generation in:
+- `swiftgen.yml`
+- `swiftgen-elements/swiftgen.yml`
+
+Current strings config:
+```yaml
+strings:
+  inputs:
+    - swiftgen-elements/en.lproj
+  outputs:
+    - templateName: structured-swift5
+      output: swiftgen-elements/Generated/SwiftGen/L10n+Generated.swift
+```
+
+Updated `swiftgen-elements/ContentView.swift` to use:
+- `L10n.Home.title`
+- `L10n.Home.welcome(username)`
+- `L10n.Notifications.unread(unreadCount)`
+- `L10n.Cart.items(unreadCount)`
+
+### Commands run
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen config lint && swiftgen config run --verbose
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' clean build | cat
+```
+
+### Inspect the generated output
+Generated file:
+- `swiftgen-elements/Generated/SwiftGen/L10n+Generated.swift`
+
+Generated API shape includes:
+- `L10n.Home.title`
+- `L10n.Home.welcome(_:)`
+- `L10n.Notifications.unread(_:)` with `Int`
+- `L10n.Cart.items(_:)` with `Int` (plural key from stringsdict)
+
+### Break it deliberately; diagnose and repair
+#### Failure A: duplicate table input config
+Tried strings inputs as both `en.lproj` and `es.lproj`.
+
+Observed SwiftGen error:
+- `Error: Duplicate file of the same type for table "Localizable" ...`
+
+Fix:
+- use one development-localization input (`en.lproj`) for code generation.
+- keep other locales (`es.lproj`) for runtime localization resources.
+
+#### Failure B: wrong accessor argument type
+Deliberately changed:
+- `L10n.Notifications.unread(unreadCount)` -> `L10n.Notifications.unread("three")`
+
+Observed compile-time error:
+- `cannot convert value of type 'String' to expected argument type 'Int'`
+
+Fix:
+- restored typed call with `Int` argument.
+
+### Runtime localization check (two locales + missing key)
+Used a Swift script to inspect `en.lproj` and `es.lproj` directly:
+- `[en] title=Inbox`
+- `[en] welcome=Welcome, Mauro!`
+- `[en] unread=3 unread notifications`
+- `[en] cart=3 items in cart`
+- `[es] title=Bandeja`
+- `[es] welcome=Hola, Mauro!`
+- `[es] unread=notifications.unread` (missing key behavior)
+- `[es] cart=3 articulos en el carrito`
+
+### String Catalog support check
+Installed SwiftGen `6.6.2` exposes parsers including `strings`/`xcassets` but no dedicated `.xcstrings` parser command in `swiftgen --help` or `swiftgen run --help`.
+
+### Compare alternatives and trade-offs
+- SwiftGen gives typed localization function signatures and catches argument-type misuse at compile time.
+- Missing translations across locales are not fully validated by this generation setup; they still require runtime checks/tests.
+- Native Xcode String Catalog workflows are strong for translation management, while SwiftGen adds explicit code API control for `.strings`/`.stringsdict` pipelines.
+
+### Undo / rollback notes
+- Remove `strings:` section from `swiftgen.yml`.
+- Delete `en.lproj` / `es.lproj` localization files.
+- Delete `swiftgen-elements/Generated/SwiftGen/L10n+Generated.swift`.
+- Revert localization usage in `swiftgen-elements/ContentView.swift`.
+
+### Takeaway
+SwiftGen localization accessors improve call-site type safety and ergonomics, but translation completeness remains a runtime/testing responsibility. For this setup, SwiftGen and native localization tooling are complementary rather than mutually exclusive.

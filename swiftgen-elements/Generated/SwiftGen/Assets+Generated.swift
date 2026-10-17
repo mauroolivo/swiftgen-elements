@@ -30,9 +30,11 @@ internal enum Asset {
   internal enum Colors {
     internal static let accent = ColorAsset(name: "accent")
     internal static let base = ColorAsset(name: "base")
+    internal static let statusWarning = ColorAsset(name: "status-warning")
   }
   internal enum Icons {
-    internal static let caretLeftLight = ImageAsset(name: "caret-left-light")
+    internal static let caretLeftRenamed = ImageAsset(name: "caret-left-renamed")
+    internal static let caretRightLight = ImageAsset(name: "caret-right-light")
   }
 }
 // swiftlint:enable identifier_name line_length nesting type_body_length type_name
