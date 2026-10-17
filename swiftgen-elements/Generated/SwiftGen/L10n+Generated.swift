@@ -10,6 +10,8 @@ import Foundation
 // swiftlint:disable explicit_type_interface function_parameter_count identifier_name line_length
 // swiftlint:disable nesting type_body_length type_name vertical_whitespace_opening_braces
 internal enum L10n {
+  /// Cancel
+  internal static let idCancel = L10n.tr("Localizable", "id_cancel", fallback: "Cancel")
   internal enum Cart {
     /// Plural format key: "%#@items@"
     internal static func items(_ p1: Int) -> String {

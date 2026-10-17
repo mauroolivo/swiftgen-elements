@@ -1,3 +1,4 @@
 "home.title" = "Inbox";
 "home.welcome" = "Welcome, %@!";
 "notifications.unread" = "%d unread notifications";
+"id_cancel" = "Cancel";

@@ -69,6 +69,7 @@ struct ContentView: View {
                         username
                     )
                 )
+                Text(L10n.idCancel)
             }
         }
         .padding()
