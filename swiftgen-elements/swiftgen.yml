@@ -1,0 +1,8 @@
+xcassets:
+  inputs:
+    - swiftgen-elements/Assets.xcassets
+    - swiftgen-elements/Colors.xcassets
+    - swiftgen-elements/Icons.xcassets
+  outputs:
+    - templateName: swift5
+      output: swiftgen-elements/Generated/SwiftGen/Assets+Generated.swift
