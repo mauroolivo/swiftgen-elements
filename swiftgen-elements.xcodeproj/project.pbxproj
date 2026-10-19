@@ -7,6 +7,7 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        347BAFC1308415AB00CF31E3 /* InboxFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 347BAFC3308415AB00CF31E3 /* InboxFeature */; };
         347BAFB33083E51A00CF31E3 /* SWIFTGEN_PRACTICAL_DEEP_DIVE_COURSE_PROMPT.md in Resources */ = {isa = PBXBuildFile; fileRef = 347BAFB23083E51A00CF31E3 /* SWIFTGEN_PRACTICAL_DEEP_DIVE_COURSE_PROMPT.md */; };
         347BAFB53083E55900CF31E3 /* _UI_MATTERS_VISION_MISSION.md in Resources */ = {isa = PBXBuildFile; fileRef = 347BAFB43083E55900CF31E3 /* _UI_MATTERS_VISION_MISSION.md */; };
 /* End PBXBuildFile section */
@@ -30,6 +31,7 @@
         347BAFA13083E4FA00CF31E3 /* Frameworks */ = {
             isa = PBXFrameworksBuildPhase;
             files = (
+                347BAFC1308415AB00CF31E3 /* InboxFeature in Frameworks */,
             );
         };
 /* End PBXFrameworksBuildPhase section */
@@ -72,6 +74,9 @@
                 347BAFA63083E4FA00CF31E3 /* swiftgen-elements */,
             );
             name = "swiftgen-elements";
+            packageProductDependencies = (
+                347BAFC3308415AB00CF31E3 /* InboxFeature */,
+            );
             productName = "swiftgen-elements";
             productReference = 347BAFA43083E4FA00CF31E3 /* swiftgen-elements.app */;
             productType = "com.apple.product-type.application";
@@ -103,6 +108,9 @@
             minimizedProjectReferenceProxies = 1;
             preferredProjectObjectVersion = 77;
             productRefGroup = 347BAFA53083E4FA00CF31E3 /* Products */;
+            packageReferences = (
+                347BAFC2308415AB00CF31E3 /* XCLocalSwiftPackageReference "Packages" */,
+            );
             projectDirPath = "";
             projectRoot = "";
             targets = (
@@ -110,6 +118,21 @@
             );
         };
 /* End PBXProject section */
+
+/* Begin XCLocalSwiftPackageReference section */
+        347BAFC2308415AB00CF31E3 /* XCLocalSwiftPackageReference "Packages" */ = {
+            isa = XCLocalSwiftPackageReference;
+            relativePath = Packages;
+        };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+        347BAFC3308415AB00CF31E3 /* InboxFeature */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = 347BAFC2308415AB00CF31E3 /* XCLocalSwiftPackageReference "Packages" */;
+            productName = InboxFeature;
+        };
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXShellScriptBuildPhase section */
         347BAFC0308405B300CF31E3 /* SwiftGen */ = {
@@ -138,7 +161,7 @@
             );
             runOnlyForDeploymentPostprocessing = 0;
             shellPath = /bin/sh;
-            shellScript = "set -euo pipefail\nif ! command -v swiftgen >/dev/null 2>&1; then\n  echo \"error: SwiftGen is not installed or not in PATH.\"\n  exit 1\nfi\ncd \"$SRCROOT\"\nswiftgen config lint --config \"$SRCROOT/swiftgen.yml\"\nswiftgen config run --config \"$SRCROOT/swiftgen.yml\"\n";
+                  shellScript = "set -euo pipefail\nexport PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n\nif command -v swiftgen >/dev/null 2>&1; then\n  SWIFTGEN_BIN=\"$(command -v swiftgen)\"\nelif [ -x /opt/homebrew/bin/swiftgen ]; then\n  SWIFTGEN_BIN=\"/opt/homebrew/bin/swiftgen\"\nelif [ -x /usr/local/bin/swiftgen ]; then\n  SWIFTGEN_BIN=\"/usr/local/bin/swiftgen\"\nelse\n  echo \"error: SwiftGen is not installed or not in PATH.\"\n  echo \"error: Checked PATH and common locations: /opt/homebrew/bin/swiftgen, /usr/local/bin/swiftgen\"\n  exit 1\nfi\n\ncd \"$SRCROOT\"\n\"$SWIFTGEN_BIN\" config lint --config \"$SRCROOT/swiftgen.yml\"\n\"$SWIFTGEN_BIN\" config run --config \"$SRCROOT/swiftgen.yml\"\n";
         };
 /* End PBXShellScriptBuildPhase section */
 

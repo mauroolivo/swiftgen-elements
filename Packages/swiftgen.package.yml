@@ -1,0 +1,8 @@
+strings:
+  inputs:
+    - Sources/InboxFeature/Resources/en.lproj
+  outputs:
+    - templateName: structured-swift5
+      output: Sources/InboxFeature/Generated/PackageL10n+Generated.swift
+      params:
+        enumName: PackageL10n

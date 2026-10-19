@@ -524,3 +524,93 @@ xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -confi
 
 ### Takeaway
 Stage 5 confirms that SwiftGen can be integrated incrementally and reproducibly in Xcode, but correctness depends on accurate input/output declarations (especially with script sandboxing enabled).
+
+
+## Stage 6 — Swift packages, resource ownership, and production decision
+
+### Goal
+Apply SwiftGen in a modular setup and compare package-native resource access (`Bundle.module`) against generated accessors.
+
+### Hypothesis
+A package-owned feature can use native `Bundle.module` APIs with minimal setup, while SwiftGen still adds typed key ergonomics for package localization. Wrong-bundle lookups should fail at runtime/tests.
+
+### Hands-on changes
+Created local package:
+- `Packages/Package.swift`
+- product/target: `InboxFeature`
+- `defaultLocalization: "en"`
+- target resources: `.process("Resources")`
+
+Added package resources:
+- `Packages/Sources/InboxFeature/Resources/InboxAssets.xcassets/PackageAccent.colorset`
+- `Packages/Sources/InboxFeature/Resources/en.lproj/Localizable.strings`
+- `Packages/Sources/InboxFeature/Resources/es.lproj/Localizable.strings`
+
+Added package feature code:
+- `Packages/Sources/InboxFeature/InboxFeature.swift`
+  - `InboxFeatureNativeView` (native `String(localized:, bundle: .module)` + `Color(..., bundle: .module)`)
+  - `InboxFeatureSwiftGenView` (generated `PackageL10n` + native package color)
+  - `InboxFeatureProbe` helper to verify locale bundle lookup
+  - two `#Preview` blocks for package-owned views
+
+Added package SwiftGen config:
+- `Packages/swiftgen.package.yml`
+  - `strings` parser only
+  - output: `Packages/Sources/InboxFeature/Generated/PackageL10n+Generated.swift`
+
+### Commands run
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements/Packages && swiftgen config lint --config swiftgen.package.yml
+cd /Users/mauro/files/code/uimatters/swiftgen-elements/Packages && swiftgen config run --config swiftgen.package.yml --verbose
+cd /Users/mauro/files/code/uimatters/swiftgen-elements/Packages && swift test
+```
+
+### Inspect the generated output
+Generated package file:
+- `Packages/Sources/InboxFeature/Generated/PackageL10n+Generated.swift`
+
+Observed bundle behavior:
+- generated lookup uses `BundleToken.bundle`
+- under `SWIFT_PACKAGE`, `BundleToken.bundle` resolves to `Bundle.module`
+
+This confirms generated package accessors resolve package-owned resources through the module resource bundle.
+
+### Break it deliberately; diagnose and repair
+#### Failure A: wrong bundle boundary
+Temporarily changed probe lookup from `Bundle.module` to `Bundle.main`.
+
+Observed test failure (`swift test`):
+- expectation failed for `en` and `es`
+- observed value: `"missing-bundle"`
+
+Repair:
+- restored `Bundle.module` in `InboxFeatureProbe`
+- re-ran tests: all passed.
+
+#### Failure B: package asset SwiftGen template and Swift 6 concurrency
+Initial package config also generated `PackageAssets+Generated.swift` with `xcassets` template.
+
+Observed compile error in package build:
+- `static property 'packageAccent' is not concurrency-safe because non-'Sendable' type 'ColorAsset' may have shared mutable state`
+
+Repair for this lab:
+- removed package `xcassets` generation from `swiftgen.package.yml`
+- kept package color access native via `Color("PackageAccent", bundle: .module)`
+- retained SwiftGen for package localization only.
+
+### Compare alternatives and trade-offs
+- Native package resources (`Bundle.module`) are straightforward, especially for colors/images.
+- SwiftGen in packages gives typed localization API (`PackageL10n`) and avoids string-key typos.
+- Current built-in SwiftGen `xcassets` template may need extra adaptation under strict Swift 6 concurrency checks in package contexts.
+- Per-module generation keeps ownership local but adds generator/config overhead per module.
+- A shared generated-resource module reduces duplication but can blur ownership and increase coupling.
+
+### Production implication (mini audit)
+- Pin SwiftGen version and invocation in CI.
+- Keep package-level config minimal and explicit (`swiftgen.package.yml`).
+- Treat templates as owned code; keep customizations small.
+- Define module bundle rules clearly (`Bundle.module` in package code paths).
+- Add tests that fail on wrong bundle boundaries (like `InboxFeatureProbe`).
+
+### Takeaway
+For package-owned resources, native `Bundle.module` APIs are often the simplest baseline. SwiftGen is still justified for typed localization accessors per module. In this lab, the strongest combination is: native asset/color access in package targets + SwiftGen strings where typed keys improve safety.
