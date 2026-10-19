@@ -13,3 +13,8 @@ strings:
   outputs:
     - templateName: structured-swift5
       output: swiftgen-elements/Generated/SwiftGen/L10n+Generated.swift
+    - templatePath: swiftgen-elements/Templates/strings-structured-swift5-lab.stencil
+      output: swiftgen-elements/Generated/SwiftGen/StringsLab+Generated.swift
+      params:
+        enumName: StringsLab
+        publicAccess: true

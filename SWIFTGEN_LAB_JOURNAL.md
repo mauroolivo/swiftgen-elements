@@ -267,7 +267,6 @@ Added localization resources:
 
 Configured strings generation in:
 - `swiftgen.yml`
-- `swiftgen-elements/swiftgen.yml`
 
 Current strings config:
 ```yaml
@@ -350,3 +349,91 @@ Installed SwiftGen `6.6.2` exposes parsers including `strings`/`xcassets` but no
 
 ### Takeaway
 SwiftGen localization accessors improve call-site type safety and ergonomics, but translation completeness remains a runtime/testing responsibility. For this setup, SwiftGen and native localization tooling are complementary rather than mutually exclusive.
+
+## Stage 4 - Templates, naming, and generated API design
+
+### Goal
+Customize generated localization API shape (namespace + access control) using a small owned template, then evaluate maintenance cost and failure behavior.
+
+### Hypothesis
+Duplicating the built-in strings template with minimal edits should let us safely change namespace and visibility while preserving parser behavior. A broken template should fail at generation time with a Stencil parse error.
+
+### Commands run
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen template --help
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen template list | cat
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen template cat strings structured-swift5 | cat
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen config lint --config swiftgen.yml && swiftgen config run --config swiftgen.yml --verbose | cat
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && swiftgen strings swiftgen-elements/en.lproj --templatePath swiftgen-elements/Templates/strings-stage4-bad.stencil --output /tmp/Stage4Bad.swift 2>&1 | cat
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && rm -f swiftgen-elements/Templates/strings-stage4-bad.stencil && swiftgen config lint --config swiftgen.yml && swiftgen config run --config swiftgen.yml --verbose | cat
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build 2>&1 | cat
+```
+
+### Hands-on changes
+Added custom template:
+- `swiftgen-elements/Templates/strings-structured-swift5-lab.stencil`
+
+Updated config outputs (in both config files used in repo):
+- `swiftgen.yml`
+- 
+Added second strings output with params:
+- `templatePath: swiftgen-elements/Templates/strings-structured-swift5-lab.stencil`
+- `output: swiftgen-elements/Generated/SwiftGen/StringsLab+Generated.swift`
+- `params.enumName: StringsLab`
+- `params.publicAccess: true`
+
+Updated usage in:
+- `swiftgen-elements/ContentView.swift`
+
+Added Stage 4 section that calls:
+- `StringsLab.Home.title`
+- `StringsLab.Home.welcome(username)`
+- `StringsLab.idCancel`
+
+### Inspect the generated output
+Generated custom file:
+- `swiftgen-elements/Generated/SwiftGen/StringsLab+Generated.swift`
+
+Observed API differences vs built-in output:
+- root enum renamed from `L10n` to `StringsLab`
+- visibility changed from `internal` to `public`
+- same nested key structure and typed function signatures preserved
+
+Template data/features confirmed from built-in template inspection:
+- `tables` tree (table names, levels, strings)
+- per-key metadata (`string.key`, `string.translation`, `string.types`)
+- params used for customization (`enumName`, `publicAccess`, `bundle`, `lookupFunction`, etc.)
+
+### Break it deliberately; diagnose and repair
+#### Failure
+Created a temporary invalid Stencil template (`strings-stage4-bad.stencil`) with malformed `{% if %}` syntax.
+
+Observed SwiftGen error:
+- `Error: 'if' expression error: dangling token`
+
+#### Repair
+- removed bad template file
+- reran `swiftgen config lint` + `swiftgen config run`
+- rebuilt app successfully
+
+### Compare alternatives and trade-offs
+- Built-in templates have near-zero maintenance and are safest for long-term upgrades.
+- Small custom templates are useful when a team needs stable naming/visibility conventions not covered by params alone.
+- Owning a template introduces upgrade overhead (diffing upstream template changes, validating compatibility after SwiftGen updates).
+- The smallest worthwhile customization here is namespace/access control while preserving parser logic and runtime lookup behavior.
+
+### Undo / rollback notes
+- Remove custom strings output from `swiftgen.yml`.
+- Delete `swiftgen-elements/Templates/strings-structured-swift5-lab.stencil`.
+- Delete `swiftgen-elements/Generated/SwiftGen/StringsLab+Generated.swift`.
+- Remove `StringsLab` calls from `swiftgen-elements/ContentView.swift`.
+
+### Takeaway
+Stage 4 confirms that targeted template ownership works well when customization scope is small and explicit. The custom namespace/access change is valuable; deeper divergence from built-in templates should be justified by clear API needs because maintenance cost grows quickly.
+

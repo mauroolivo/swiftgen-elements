@@ -71,6 +71,19 @@ struct ContentView: View {
                 )
                 Text(L10n.idCancel)
             }
+
+            Divider()
+
+            Text("Stage 4: Template customization")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Custom namespace")
+                    .font(.subheadline)
+                Text(StringsLab.Home.title)
+                Text(StringsLab.Home.welcome(username))
+                Text(StringsLab.idCancel)
+            }
         }
         .padding()
     }
