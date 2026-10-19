@@ -437,3 +437,90 @@ Observed SwiftGen error:
 ### Takeaway
 Stage 4 confirms that targeted template ownership works well when customization scope is small and explicit. The custom namespace/access change is valuable; deeper divergence from built-in templates should be justified by clear API needs because maintenance cost grows quickly.
 
+
+
+## Stage 5 — Xcode build phases, incremental generation, and CI
+
+### Goal
+Integrate SwiftGen into the Xcode build graph with explicit dependencies so generation is reproducible and avoids unnecessary work.
+
+### Hypothesis
+A Run Script phase with concrete `inputPaths` and `outputPaths` should run when config/resources/templates change, and should be skipped on no-change builds.
+
+### Hands-on changes
+Updated `swiftgen-elements.xcodeproj/project.pbxproj`:
+- Added `PBXShellScriptBuildPhase` named `SwiftGen` before `Sources`.
+- Script runs:
+  - `swiftgen config lint --config "$SRCROOT/swiftgen.yml"`
+  - `swiftgen config run --config "$SRCROOT/swiftgen.yml"`
+- Declared script inputs:
+  - `swiftgen.yml`
+  - `Assets.xcassets`, `Colors.xcassets`, `Icons.xcassets`
+  - `en.lproj/Localizable.strings`
+  - `en.lproj/Localizable.stringsdict`
+  - `Templates/strings-structured-swift5-lab.stencil`
+- Declared script outputs:
+  - `Generated/SwiftGen/Assets+Generated.swift`
+  - `Generated/SwiftGen/L10n+Generated.swift`
+  - `Generated/SwiftGen/StringsLab+Generated.swift`
+
+### Commands run
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build > /tmp/stage5_nochange.log 2>&1
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && touch swiftgen-elements/en.lproj/Localizable.strings && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build > /tmp/stage5_resource_change.log 2>&1
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && touch swiftgen.yml && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build > /tmp/stage5_config_change.log 2>&1
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && touch swiftgen-elements/Templates/strings-structured-swift5-lab.stencil && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build > /tmp/stage5_template_change.log 2>&1
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && PATH='/usr/bin:/bin:/usr/sbin:/sbin' xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build > /tmp/stage5_missing_swiftgen.log 2>&1
+
+cd /Users/mauro/files/code/uimatters/swiftgen-elements && xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' clean build > /tmp/stage5_repair_clean.log 2>&1
+```
+
+### Inspect script sandbox and dependency behavior
+Initial script version used `en.lproj` as an input directory and failed under script sandboxing:
+- `Error: Failed to load a file at "/Users/.../en.lproj/Localizable.strings"`
+
+Fix:
+- switched to explicit input file paths for `Localizable.strings` and `Localizable.stringsdict`.
+
+Observed behavior after fix:
+- No-change build: `** BUILD SUCCEEDED **` with no `PhaseScriptExecution SwiftGen` line (script skipped).
+- Resource timestamp change (`Localizable.strings`): `PhaseScriptExecution SwiftGen` ran.
+- Config timestamp change (`swiftgen.yml`): `PhaseScriptExecution SwiftGen` ran.
+- Template timestamp change (`strings-structured-swift5-lab.stencil`): `PhaseScriptExecution SwiftGen` ran.
+- In all change cases above, build succeeded and generated files were unchanged when content did not change.
+
+### Deliberate failure; diagnose and repair
+Failure injected:
+- build with restricted PATH so `swiftgen` cannot be found.
+
+Observed error:
+- `error: SwiftGen is not installed or not in PATH.`
+- `** BUILD FAILED **`
+
+Repair:
+- restored normal PATH and ran a clean build.
+- `PhaseScriptExecution SwiftGen` ran and `** BUILD SUCCEEDED **`.
+
+### Compare alternatives and trade-offs
+- Run Script integration keeps generation tied to the Xcode build graph.
+- Declared inputs/outputs plus script sandboxing force explicit dependency ownership.
+- Missing or overly broad inputs can cause false skips or sandbox failures.
+- `swiftgen config lint` in build catches config drift early, at the cost of a small extra step.
+
+### CI draft command sequence
+```bash
+cd /Users/mauro/files/code/uimatters/swiftgen-elements
+swiftgen --version
+swiftgen config lint --config swiftgen.yml
+swiftgen config run --config swiftgen.yml
+xcodebuild -project swiftgen-elements.xcodeproj -scheme swiftgen-elements -configuration Debug -destination 'generic/platform=iOS Simulator' build
+```
+
+### Takeaway
+Stage 5 confirms that SwiftGen can be integrated incrementally and reproducibly in Xcode, but correctness depends on accurate input/output declarations (especially with script sandboxing enabled).
